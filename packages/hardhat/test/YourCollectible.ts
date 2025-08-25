@@ -333,7 +333,9 @@ describe("🚩 YourCollectible - Comprehensive Test Suite", () => {
 		});
 
 		it("Should have correct base URI", async () => {
-			const { contract, owner } = await loadFixture(deployYourCollectibleFixture);
+			const { contract, owner } = await loadFixture(
+				deployYourCollectibleFixture,
+			);
 
 			// We can't directly call _baseURI() since it's internal,
 			// but we can verify it through tokenURI after minting
@@ -346,12 +348,157 @@ describe("🚩 YourCollectible - Comprehensive Test Suite", () => {
 
 	describe("2) Minting", () => {
 		// Tests for mintItem functionality
-		it.skip("public mint succeeds for any account");
-		it.skip("increments balances, totalSupply, and counter");
-		it.skip("emits Transfer from zero address");
-		it.skip("mints sequential token IDs starting at 1");
-		it.skip("reverts when minting to zero address");
-		it.skip("tokenURI exists for minted token, reverts for non-existent");
+		it("Should allow public mint for any account", async () => {
+			const { contract, alice, bob } = await loadFixture(
+				deployYourCollectibleFixture,
+			);
+
+			// Alice (non-owner) should be able to mint
+			await expect(
+				contract.connect(alice).mintItem(alice.address, "QmAliceToken"),
+			).to.not.be.reverted;
+
+			// Bob (non-owner) should be able to mint
+			await expect(contract.connect(bob).mintItem(bob.address, "QmBobToken")).to
+				.not.be.reverted;
+
+			// Owner should also be able to mint
+			await expect(contract.mintItem(alice.address, "QmOwnerToken")).to.not.be
+				.reverted;
+
+			// Verify the tokens were actually minted
+			expect(await contract.totalSupply()).to.equal(3);
+			expect(await contract.balanceOf(alice.address)).to.equal(2);
+			expect(await contract.balanceOf(bob.address)).to.equal(1);
+		});
+
+		it("Should increment balances, totalSupply, and counter", async () => {
+			const { contract, alice, bob } = await loadFixture(
+				deployYourCollectibleFixture,
+			);
+
+			// Initial state
+			expect(await contract.totalSupply()).to.equal(0);
+			expect(await contract.tokenIdCounter()).to.equal(0);
+			expect(await contract.balanceOf(alice.address)).to.equal(0);
+			expect(await contract.balanceOf(bob.address)).to.equal(0);
+
+			// Mint first token to alice
+			await contract.mintItem(alice.address, "QmToken1");
+
+			expect(await contract.totalSupply()).to.equal(1);
+			expect(await contract.tokenIdCounter()).to.equal(1);
+			expect(await contract.balanceOf(alice.address)).to.equal(1);
+			expect(await contract.balanceOf(bob.address)).to.equal(0);
+
+			// Mint second token to bob
+			await contract.mintItem(bob.address, "QmToken2");
+
+			expect(await contract.totalSupply()).to.equal(2);
+			expect(await contract.tokenIdCounter()).to.equal(2);
+			expect(await contract.balanceOf(alice.address)).to.equal(1);
+			expect(await contract.balanceOf(bob.address)).to.equal(1);
+
+			// Mint third token to alice (should increase her balance)
+			await contract.mintItem(alice.address, "QmToken3");
+
+			expect(await contract.totalSupply()).to.equal(3);
+			expect(await contract.tokenIdCounter()).to.equal(3);
+			expect(await contract.balanceOf(alice.address)).to.equal(2);
+			expect(await contract.balanceOf(bob.address)).to.equal(1);
+		});
+
+		it("Should emit Transfer from zero address", async () => {
+			const { contract, alice } = await loadFixture(
+				deployYourCollectibleFixture,
+			);
+
+			// Mint should emit Transfer event from zero address
+			await expect(contract.mintItem(alice.address, "QmTestToken"))
+				.to.emit(contract, "Transfer")
+				.withArgs(ethers.ZeroAddress, alice.address, 1);
+
+			// Second mint should emit with token ID 2
+			await expect(contract.mintItem(alice.address, "QmTestToken2"))
+				.to.emit(contract, "Transfer")
+				.withArgs(ethers.ZeroAddress, alice.address, 2);
+		});
+
+		it("Should mint sequential token IDs starting at 1", async () => {
+			const { contract, alice, bob } = await loadFixture(
+				deployYourCollectibleFixture,
+			);
+
+			// Mint multiple tokens and verify sequential IDs
+			const tx1 = await contract.mintItem(alice.address, "QmToken1");
+			const tx2 = await contract.mintItem(bob.address, "QmToken2");
+			const tx3 = await contract.mintItem(alice.address, "QmToken3");
+
+			// Wait for receipts and check events
+			const receipt1 = await tx1.wait();
+			const receipt2 = await tx2.wait();
+			const receipt3 = await tx3.wait();
+
+			// Get Transfer events to verify token IDs
+			const events1 = await contract.queryFilter(
+				contract.filters.Transfer(ethers.ZeroAddress, alice.address, null),
+				receipt1!.blockNumber,
+				receipt1!.blockNumber,
+			);
+			const events2 = await contract.queryFilter(
+				contract.filters.Transfer(ethers.ZeroAddress, bob.address, null),
+				receipt2!.blockNumber,
+				receipt2!.blockNumber,
+			);
+			const events3 = await contract.queryFilter(
+				contract.filters.Transfer(ethers.ZeroAddress, alice.address, null),
+				receipt3!.blockNumber,
+				receipt3!.blockNumber,
+			);
+
+			// Verify sequential token IDs: 1, 2, 3
+			expect(events1[0].args.tokenId).to.equal(1);
+			expect(events2[0].args.tokenId).to.equal(2);
+			expect(events3[events3.length - 1].args.tokenId).to.equal(3);
+
+			// Also verify ownership
+			expect(await contract.ownerOf(1)).to.equal(alice.address);
+			expect(await contract.ownerOf(2)).to.equal(bob.address);
+			expect(await contract.ownerOf(3)).to.equal(alice.address);
+		});
+
+		it("Should revert when minting to zero address", async () => {
+			const { contract } = await loadFixture(deployYourCollectibleFixture);
+
+			// Attempt to mint to zero address should revert with custom error
+			await expect(contract.mintItem(ethers.ZeroAddress, "QmTestToken"))
+				.to.be.revertedWithCustomError(contract, "ERC721InvalidReceiver")
+				.withArgs(ethers.ZeroAddress);
+		});
+
+		it("Should handle tokenURI correctly for minted and non-existent tokens", async () => {
+			const { contract, alice } = await loadFixture(
+				deployYourCollectibleFixture,
+			);
+
+			// Mint a token
+			await contract.mintItem(alice.address, "QmTestToken");
+
+			// tokenURI should exist for minted token
+			expect(await contract.tokenURI(1)).to.equal(
+				"https://ipfs.io/ipfs/QmTestToken",
+			);
+
+			// tokenURI should revert for non-existent token
+			await expect(contract.tokenURI(999))
+				.to.be.revertedWithCustomError(contract, "ERC721NonexistentToken")
+				.withArgs(999);
+
+			// Also test tokenURI for token ID 0 (should not exist)
+			await expect(contract.tokenURI(0))
+				.to.be.revertedWithCustomError(contract, "ERC721NonexistentToken")
+				.withArgs(0);
+		});
 	});
 
 	describe("3) Metadata / tokenURI", () => {
