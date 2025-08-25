@@ -18,12 +18,11 @@ contract ERC721ReceiverGasConsumer is IERC721Receiver {
         uint256 tokenId,
         bytes calldata
     ) external override returns (bytes4) {
-        // Consume gas by doing unnecessary storage operations
-        for (uint256 i = 0; i < 100; i++) {
+        // Consume moderate gas - scaled down for faster CI tests
+        for (uint256 i = 0; i < 15; i++) {
             wastedStorage[tokenId + i] = block.timestamp + i;
         }
         
         return IERC721Receiver.onERC721Received.selector;
     }
-}
 

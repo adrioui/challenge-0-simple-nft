@@ -26,7 +26,13 @@ contract ERC721ReceiverReentrant is IERC721Receiver {
         if (!reentrancyAttempted) {
             reentrancyAttempted = true;
             // This should fail due to OpenZeppelin's reentrancy protection
-            nftContract.transferFrom(address(this), from, tokenId);
+            // Wrap in try/catch to avoid cluttering test logs with revert messages
+            try nftContract.transferFrom(address(this), from, tokenId) {
+                // If this succeeds, reentrancy protection failed
+                revert("Reentrancy attack succeeded - this should not happen!");
+            } catch {
+                // Expected: reentrancy should be blocked
+            }
         }
         
         return IERC721Receiver.onERC721Received.selector;

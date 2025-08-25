@@ -18,3 +18,4 @@ contract ERC721ReceiverRevert is IERC721Receiver {
         revert("ERC721ReceiverRevert: transfer rejected");
     }
 }
+

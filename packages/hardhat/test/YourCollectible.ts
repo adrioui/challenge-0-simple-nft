@@ -4,7 +4,7 @@ import { loadFixture } from "@nomicfoundation/hardhat-network-helpers";
 import type { YourCollectible } from "../typechain-types";
 import { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/signers";
 
-describe("🚩 YourCollectible - Quite Comprehensive Test Suite", () => {
+describe("🚩 YourCollectible - Comprehensive Test Suite", () => {
 	// ===== FIXTURES =====
 
 	/**
@@ -64,19 +64,41 @@ describe("🚩 YourCollectible - Quite Comprehensive Test Suite", () => {
 			const tx = await contract.mintItem(to, uri);
 			const receipt = await tx.wait();
 
-			// Extract tokenId from Transfer event
-			const transferEvent = receipt?.logs.find(
-				(log) =>
-					log.topics[0] === ethers.id("Transfer(address,address,uint256)"),
+			// Use typed event filtering instead of raw log parsing
+			const transferEvents = await contract.queryFilter(
+				contract.filters.Transfer(ethers.ZeroAddress, to, null),
+				receipt!.blockNumber,
+				receipt!.blockNumber,
 			);
 
-			if (transferEvent) {
-				const tokenId = Number(transferEvent.topics[3]);
+			if (transferEvents.length > 0) {
+				const tokenId = Number(
+					transferEvents[transferEvents.length - 1].args.tokenId,
+				);
 				tokenIds.push(tokenId);
 			}
 		}
 
 		return tokenIds;
+	}
+
+	/**
+	 * Mint a single token with empty URI (for testing empty URI behavior)
+	 */
+	async function mintWithEmptyURI(
+		contract: YourCollectible,
+		to: string,
+	): Promise<number> {
+		const tx = await contract.mintItem(to, "");
+		const receipt = await tx.wait();
+
+		const transferEvents = await contract.queryFilter(
+			contract.filters.Transfer(ethers.ZeroAddress, to, null),
+			receipt!.blockNumber,
+			receipt!.blockNumber,
+		);
+
+		return Number(transferEvents[transferEvents.length - 1].args.tokenId);
 	}
 
 	/**
@@ -169,6 +191,16 @@ describe("🚩 YourCollectible - Quite Comprehensive Test Suite", () => {
 			"ERC721ReceiverReentrant",
 		);
 		return await MockReceiver.deploy(nftAddress);
+	}
+
+	/**
+	 * Deploy a mock ERC721Receiver that consumes moderate gas
+	 */
+	async function deployMockReceiverGasConsumer() {
+		const MockReceiver = await ethers.getContractFactory(
+			"ERC721ReceiverGasConsumer",
+		);
+		return await MockReceiver.deploy();
 	}
 
 	// ===== INTERFACE CONSTANTS =====

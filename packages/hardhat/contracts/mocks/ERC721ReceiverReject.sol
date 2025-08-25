@@ -19,3 +19,4 @@ contract ERC721ReceiverReject is IERC721Receiver {
         return bytes4(0x12345678);
     }
 }
+
