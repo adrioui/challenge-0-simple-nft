@@ -289,10 +289,59 @@ describe("🚩 YourCollectible - Comprehensive Test Suite", () => {
 	// These will be implemented in the next steps:
 
 	describe("1) Deployment", () => {
-		// Tests for initial state, interface support, etc.
-		it.skip("initializes name and symbol");
-		it.skip("starts with zero supply and counter");
-		it.skip("supports expected interfaces");
+		it("Should initialize name and symbol correctly", async () => {
+			const { contract } = await loadFixture(deployYourCollectibleFixture);
+
+			expect(await contract.name()).to.equal("YourCollectible");
+			expect(await contract.symbol()).to.equal("YCB");
+		});
+
+		it("Should start with zero supply and counter", async () => {
+			const { contract } = await loadFixture(deployYourCollectibleFixture);
+
+			expect(await contract.totalSupply()).to.equal(0);
+			expect(await contract.tokenIdCounter()).to.equal(0);
+		});
+
+		it("Should support expected interfaces", async () => {
+			const { contract } = await loadFixture(deployYourCollectibleFixture);
+
+			// ERC165
+			expect(await contract.supportsInterface(INTERFACE_IDS.ERC165)).to.be.true;
+
+			// ERC721
+			expect(await contract.supportsInterface(INTERFACE_IDS.ERC721)).to.be.true;
+
+			// ERC721Metadata
+			expect(await contract.supportsInterface(INTERFACE_IDS.ERC721Metadata)).to
+				.be.true;
+
+			// ERC721Enumerable
+			expect(await contract.supportsInterface(INTERFACE_IDS.ERC721Enumerable))
+				.to.be.true;
+
+			// Should not support random interface
+			expect(await contract.supportsInterface("0x12345678")).to.be.false;
+		});
+
+		it("Should set deployer as owner", async () => {
+			const { contract, owner } = await loadFixture(
+				deployYourCollectibleFixture,
+			);
+
+			expect(await contract.owner()).to.equal(owner.address);
+		});
+
+		it("Should have correct base URI", async () => {
+			const { contract, owner } = await loadFixture(deployYourCollectibleFixture);
+
+			// We can't directly call _baseURI() since it's internal,
+			// but we can verify it through tokenURI after minting
+			await contract.mintItem(owner.address, "testCID");
+			expect(await contract.tokenURI(1)).to.equal(
+				"https://ipfs.io/ipfs/testCID",
+			);
+		});
 	});
 
 	describe("2) Minting", () => {

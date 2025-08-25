@@ -25,4 +25,5 @@ contract ERC721ReceiverGasConsumer is IERC721Receiver {
         
         return IERC721Receiver.onERC721Received.selector;
     }
+}
 
