@@ -502,10 +502,64 @@ describe("🚩 YourCollectible - Comprehensive Test Suite", () => {
 	});
 
 	describe("3) Metadata / tokenURI", () => {
-		// Tests for URI handling
-		it.skip("returns base + provided path");
-		it.skip("reverts for empty URI (unsupported)");
-		it.skip("tokenURI remains stable across transfers");
+		it("Should return base URI + provided path", async () => {
+			const { contract, alice } = await loadFixture(
+				deployYourCollectibleFixture,
+			);
+
+			// Test various CID formats
+			const testCases = [
+				{ uri: "QmTestCID123", expected: "https://ipfs.io/ipfs/QmTestCID123" },
+				{
+					uri: "bafkreiabcd1234",
+					expected: "https://ipfs.io/ipfs/bafkreiabcd1234",
+				},
+			];
+
+			for (let i = 0; i < testCases.length; i++) {
+				const { uri, expected } = testCases[i];
+				await contract.mintItem(alice.address, uri);
+				const tokenId = i + 1;
+
+				expect(await contract.tokenURI(tokenId)).to.equal(expected);
+			}
+		});
+
+		it("Should handle empty URI consistently", async () => {
+			const { contract, alice } = await loadFixture(
+				deployYourCollectibleFixture,
+			);
+
+			await contract.mintItem(alice.address, "");
+			const tokenURI = await contract.tokenURI(1);
+
+			// The contract uses token ID as fallback when URI is empty
+			expect(tokenURI).to.equal("https://ipfs.io/ipfs/1");
+
+			// Test with second token to confirm pattern
+			await contract.mintItem(alice.address, "");
+			expect(await contract.tokenURI(2)).to.equal("https://ipfs.io/ipfs/2");
+		});
+
+		it("Should maintain stable tokenURI across transfers", async () => {
+			const { contract, alice, bob } = await loadFixture(
+				deployYourCollectibleFixture,
+			);
+
+			const testURI = "QmStableTestToken";
+			const expectedURI = "https://ipfs.io/ipfs/QmStableTestToken";
+
+			await contract.mintItem(alice.address, testURI);
+			expect(await contract.tokenURI(1)).to.equal(expectedURI);
+
+			// Transfer to bob
+			await contract.connect(alice).approve(bob.address, 1);
+			await contract.connect(bob).transferFrom(alice.address, bob.address, 1);
+
+			// URI should remain stable
+			expect(await contract.tokenURI(1)).to.equal(expectedURI);
+			expect(await contract.ownerOf(1)).to.equal(bob.address);
+		});
 	});
 
 	describe("4) Approvals", () => {
