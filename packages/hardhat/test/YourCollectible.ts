@@ -564,40 +564,322 @@ describe("🚩 YourCollectible - Comprehensive Test Suite", () => {
 
 	describe("4) Approvals", () => {
 		// Tests for approval mechanisms
-		it.skip("owner can approve one token");
-		it.skip("owner can set/unset approvalForAll");
-		it.skip("clears single-token approval on transfer");
+		it("Should allow owner to approve one token", async () => {
+			const { contract, alice, bob } = await loadFixture(
+				deployYourCollectibleFixture,
+			);
+
+			// Mint token to alice
+			await contract.mintItem(alice.address, "QmTestToken");
+			const tokenId = 1;
+
+			// Initially no approval
+			expect(await contract.getApproved(tokenId)).to.equal(ethers.ZeroAddress);
+
+			// Alice approves Bob for token 1
+			await expect(contract.connect(alice).approve(bob.address, tokenId))
+				.to.emit(contract, "Approval")
+				.withArgs(alice.address, bob.address, tokenId);
+
+			// Verify approval
+			expect(await contract.getApproved(tokenId)).to.equal(bob.address);
+
+			// Bob can now transfer the token
+			await expect(
+				contract.connect(bob).transferFrom(alice.address, bob.address, tokenId),
+			).to.not.be.reverted;
+
+			// Verify ownership changed
+			expect(await contract.ownerOf(tokenId)).to.equal(bob.address);
+		});
+
+		it("Should allow owner to set/unset approvalForAll", async () => {
+			const { contract, alice, bob, owner } = await loadFixture(
+				deployYourCollectibleFixture,
+			);
+
+			// Mint multiple tokens to alice
+			await contract.mintItem(alice.address, "QmToken1");
+			await contract.mintItem(alice.address, "QmToken2");
+			await contract.mintItem(alice.address, "QmToken3");
+
+			// Initially no approval for all
+			expect(await contract.isApprovedForAll(alice.address, bob.address)).to.be
+				.false;
+
+			// Alice sets approval for all to Bob
+			await expect(contract.connect(alice).setApprovalForAll(bob.address, true))
+				.to.emit(contract, "ApprovalForAll")
+				.withArgs(alice.address, bob.address, true);
+
+			// Verify approval for all is set
+			expect(await contract.isApprovedForAll(alice.address, bob.address)).to.be
+				.true;
+
+			// Bob can now transfer any of Alice's tokens
+			await expect(
+				contract.connect(bob).transferFrom(alice.address, bob.address, 1),
+			).to.not.be.reverted;
+			await expect(
+				contract.connect(bob).transferFrom(alice.address, bob.address, 2),
+			).to.not.be.reverted;
+
+			// Alice revokes approval for all
+			await expect(
+				contract.connect(alice).setApprovalForAll(bob.address, false),
+			)
+				.to.emit(contract, "ApprovalForAll")
+				.withArgs(alice.address, bob.address, false);
+
+			// Verify approval for all is removed
+			expect(await contract.isApprovedForAll(alice.address, bob.address)).to.be
+				.false;
+
+			// Bob can no longer transfer Alice's remaining tokens
+			await expect(
+				contract.connect(bob).transferFrom(alice.address, bob.address, 3),
+			)
+				.to.be.revertedWithCustomError(contract, "ERC721InsufficientApproval")
+				.withArgs(bob.address, 3);
+		});
+
+		it("Should clear single-token approval on transfer", async () => {
+			const { contract, alice, bob, owner } = await loadFixture(
+				deployYourCollectibleFixture,
+			);
+
+			// Mint token to alice
+			await contract.mintItem(alice.address, "QmTestToken");
+			const tokenId = 1;
+
+			// Alice approves owner for token 1
+			await contract.connect(alice).approve(owner.address, tokenId);
+			expect(await contract.getApproved(tokenId)).to.equal(owner.address);
+
+			// Owner transfers token from alice to bob
+			await contract.transferFrom(alice.address, bob.address, tokenId);
+
+			// Approval should be cleared after transfer
+			expect(await contract.getApproved(tokenId)).to.equal(ethers.ZeroAddress);
+			expect(await contract.ownerOf(tokenId)).to.equal(bob.address);
+
+			// Test with safeTransferFrom as well
+			await contract.mintItem(bob.address, "QmTestToken2");
+			const tokenId2 = 2;
+
+			// Bob approves alice for token 2
+			await contract.connect(bob).approve(alice.address, tokenId2);
+			expect(await contract.getApproved(tokenId2)).to.equal(alice.address);
+
+			// Alice uses safeTransferFrom to transfer back to herself
+			await contract
+				.connect(alice)
+				["safeTransferFrom(address,address,uint256)"](
+					bob.address,
+					alice.address,
+					tokenId2,
+				);
+
+			// Approval should be cleared after safeTransferFrom too
+			expect(await contract.getApproved(tokenId2)).to.equal(ethers.ZeroAddress);
+			expect(await contract.ownerOf(tokenId2)).to.equal(alice.address);
+		});
 	});
 
+
 	describe("5) Transfers (EOA ↔ EOA)", () => {
-		// Tests for transfer functionality
-		it.skip("owner can transferFrom");
-		it.skip("safeTransferFrom works to EOA");
+		it("Owner can transferFrom to another EOA", async () => {
+			const { contract, alice, bob } = await loadFixture(
+				deployYourCollectibleFixture,
+			);
+
+			// Mint token to Alice
+			await contract.mintItem(alice.address, "QmToken1");
+
+			// Alice transfers to Bob
+			await expect(
+				contract.connect(alice).transferFrom(alice.address, bob.address, 1),
+			)
+				.to.emit(contract, "Transfer")
+				.withArgs(alice.address, bob.address, 1);
+
+			expect(await contract.ownerOf(1)).to.equal(bob.address);
+		});
+
+		it("safeTransferFrom works to EOA", async () => {
+			const { contract, alice, bob } = await loadFixture(
+				deployYourCollectibleFixture,
+			);
+
+			await contract.mintItem(alice.address, "QmToken1");
+
+			// Alice safeTransfers to Bob (EOA)
+			await expect(
+				contract
+					.connect(alice)
+					["safeTransferFrom(address,address,uint256)"](
+						alice.address,
+						bob.address,
+						1,
+					),
+			)
+				.to.emit(contract, "Transfer")
+				.withArgs(alice.address, bob.address, 1);
+
+			expect(await contract.ownerOf(1)).to.equal(bob.address);
+		});
 	});
 
 	describe("6) Safe transfers to contracts", () => {
-		// Tests with mock receiver contracts
-		it.skip("safeTransferFrom to accepting receiver succeeds");
-		it.skip("reverts with rejecting receiver");
-		it.skip("prevents reentrancy attacks");
+		it("safeTransferFrom to accepting receiver succeeds", async () => {
+			const { contract, alice } = await loadFixture(deployYourCollectibleFixture);
+			const receiver = await deployMockReceiverAccept();
+
+			await contract.mintItem(alice.address, "QmToken1");
+
+			await expect(
+				contract
+					.connect(alice)
+					["safeTransferFrom(address,address,uint256)"](
+						alice.address,
+						receiver.target,
+						1,
+					),
+			)
+				.to.emit(receiver, "TokenReceived")
+				.withArgs(alice.address, alice.address, 1, "0x");
+
+			expect(await contract.ownerOf(1)).to.equal(receiver.target);
+		});
+
+		it("Reverts with rejecting receiver", async () => {
+			const { contract, alice } = await loadFixture(deployYourCollectibleFixture);
+			const receiver = await deployMockReceiverReject();
+
+			await contract.mintItem(alice.address, "QmToken1");
+
+			await expect(
+				contract
+					.connect(alice)
+					["safeTransferFrom(address,address,uint256)"](
+						alice.address,
+						receiver.target,
+						1,
+					),
+			).to.be.revertedWithCustomError(
+				contract,
+				"ERC721InvalidReceiver",
+			);
+		});
+
+		it("Prevents reentrancy attacks", async () => {
+			const { contract, alice } = await loadFixture(deployYourCollectibleFixture);
+			const receiver = await deployMockReceiverReentrant(contract.target);
+
+			await contract.mintItem(alice.address, "QmToken1");
+
+			// Because mintItem is nonReentrant, reentrancy will fail
+			await expect(
+				contract
+					.connect(alice)
+					["safeTransferFrom(address,address,uint256)"](
+						alice.address,
+						receiver.target,
+						1,
+					),
+			).to.be.reverted; // specific revert depends on implementation
+		});
 	});
 
 	describe("7) Enumeration", () => {
-		// Tests for ERC721Enumerable functionality
-		it.skip("totalSupply updates with mints");
-		it.skip("tokenByIndex returns all token IDs");
-		it.skip("tokenOfOwnerByIndex lists owner tokens");
+		it("totalSupply updates with mints", async () => {
+			const { contract, alice } = await loadFixture(deployYourCollectibleFixture);
+
+			expect(await contract.totalSupply()).to.equal(0);
+
+			await contract.mintItem(alice.address, "Qm1");
+			expect(await contract.totalSupply()).to.equal(1);
+
+			await contract.mintItem(alice.address, "Qm2");
+			expect(await contract.totalSupply()).to.equal(2);
+		});
+
+		it("tokenByIndex returns all token IDs", async () => {
+			const { contract, alice } = await loadFixture(deployYourCollectibleFixture);
+
+			await contract.mintItem(alice.address, "Qm1");
+			await contract.mintItem(alice.address, "Qm2");
+			await contract.mintItem(alice.address, "Qm3");
+
+			const ids = [];
+			for (let i = 0; i < 3; i++) {
+				const id = await contract.tokenByIndex(i);
+				ids.push(Number(id));
+			}
+
+			expect(ids.sort()).to.deep.equal([1, 2, 3]);
+		});
+
+		it("tokenOfOwnerByIndex lists owner tokens", async () => {
+			const { contract, alice, bob } = await loadFixture(
+				deployYourCollectibleFixture,
+			);
+
+			await contract.mintItem(alice.address, "Qm1");
+			await contract.mintItem(bob.address, "Qm2");
+			await contract.mintItem(alice.address, "Qm3");
+
+			expect(await getOwnerTokenIds(contract, alice.address)).to.deep.equal([1, 3]);
+			expect(await getOwnerTokenIds(contract, bob.address)).to.deep.equal([2]);
+		});
 	});
 
 	describe("8) Ownership", () => {
-		// Tests for Ownable functionality
-		it.skip("deploying account is owner");
-		it.skip("transferOwnership updates owner");
+		it("Deploying account is owner", async () => {
+			const { contract, owner } = await loadFixture(deployYourCollectibleFixture);
+			expect(await contract.owner()).to.equal(owner.address);
+		});
+
+		it("transferOwnership updates owner", async () => {
+			const { contract, owner, alice } = await loadFixture(
+				deployYourCollectibleFixture,
+			);
+
+			await expect(contract.transferOwnership(alice.address))
+				.to.emit(contract, "OwnershipTransferred")
+				.withArgs(owner.address, alice.address);
+
+			expect(await contract.owner()).to.equal(alice.address);
+		});
 	});
 
 	describe("9) Gas & Scale (Optional)", () => {
 		// Performance and gas tracking
-		it.skip("records mint gas cost");
-		it.skip("batch mint maintains enumeration consistency");
+		it("Records mint gas cost", async () => {
+			const { contract, alice } = await loadFixture(deployYourCollectibleFixture);
+
+			const tx = await contract.mintItem(alice.address, "Qm1");
+			const receipt = await tx.wait();
+
+			console.log("Mint gas used:", receipt!.gasUsed.toString());
+
+			expect(receipt!.gasUsed).to.be.gt(0n);
+		});
+
+		it("Batch mint maintains enumeration consistency", async () => {
+			const { contract, alice } = await loadFixture(deployYourCollectibleFixture);
+
+			// Mint 10 tokens to Alice
+			const ids = await mintTokensTo(contract, alice.address, 10, "Batch");
+
+			expect(ids).to.deep.equal([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+
+			// Enumeration should still reflect all tokens
+			await expectTokensByIndexComplete(contract);
+
+			// Alice should own all 10
+			const aliceTokens = await getOwnerTokenIds(contract, alice.address);
+			expect(aliceTokens).to.deep.equal(ids);
+		});
 	});
 });
